@@ -172,8 +172,9 @@ func checkAuthCode(srv *gmail.Service, re *regexp.Regexp, processedIDs map[strin
 				}
 
 				err = notification.Push()
-			if err != nil {
-				log.Printf("既読化失敗: %v", err)
+				if err != nil {
+					log.Printf("通知の送信に失敗しました: %v", err)
+				}
 			}
 		}
 	}
