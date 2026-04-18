@@ -86,8 +86,8 @@ func main() {
 		log.Fatalf("credentials.json の読み込みエラー: %v", err)
 	}
 
-	// Gmail APIの権限（読み取りと既読化のため ModifyScope を指定）
-	config, err := google.ConfigFromJSON(b, gmail.GmailModifyScope)
+	// Gmail APIの権限（読み取りのみでOKなため ReadOnlyScope を指定）
+	config, err := google.ConfigFromJSON(b, gmail.GmailReadonlyScope)
 	if err != nil {
 		log.Fatalf("設定の解析エラー: %v", err)
 	}
