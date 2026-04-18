@@ -15,6 +15,7 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
+	"gopkg.in/toast.v1"
 )
 
 // ==========================================
@@ -150,13 +151,17 @@ func checkAuthCode(srv *gmail.Service, re *regexp.Regexp) {
 				log.Printf("コピー失敗: %v", err)
 			} else {
 				fmt.Printf("★ コピー成功: %s (件名: %s)\n", authCode, subject)
-			}
+				// ==========================================
+				// ★追加: トースト通知を送信
+				// ==========================================
+				notification := toast.Notification{
+					AppID:   "Copy Auth Code",                  // 通知の送信元として表示される名前
+					Title:   "Code Copyed",                     // 通知のタイトル
+					Message: fmt.Sprintf("Code: %s", authCode), // 通知の本文
+					Audio:   toast.Default,                     // ※コメントを外すと通知音を変えられます
+				}
 
-			// メールを既読にする（UNREADラベルを外す）
-			modReq := &gmail.ModifyMessageRequest{
-				RemoveLabelIds: []string{"UNREAD"},
-			}
-			_, err = srv.Users.Messages.Modify(user, msg.Id, modReq).Do()
+				err = notification.Push()
 			if err != nil {
 				log.Printf("既読化失敗: %v", err)
 			}
