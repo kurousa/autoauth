@@ -1,0 +1,45 @@
+name: Build and Release
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["v*"] # v1.0.0 などのタグがPushされた時に発火
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions: # リリース作成のために書き込み権限が必要
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.2"
+          cache: true
+
+      - name: Build Windows binaries
+        env:
+          GOOS: windows
+          GOARCH: amd64
+        run: |
+          go build -o autoauth.exe main.go
+          go build -ldflags="-H windowsgui" -o autoauth_bg.exe main.go
+
+      # ==========================================
+      # タグPush時のみ実行されるリリースステップ
+      # ==========================================
+      - name: Create Release
+        uses: softprops/action-gh-release@v3
+        if: startsWith(github.ref, 'refs/tags/') # タグの場合のみ実行
+        with:
+          files: |
+            autoauth.exe
+            autoauth_bg.exe
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true # コミット履歴から自動で変更ログを作成
