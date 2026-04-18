@@ -103,19 +103,20 @@ func main() {
 
 	// 抽出用の正規表現をコンパイル
 	re := regexp.MustCompile(`認証コードは\s*(.+?)\s*です`)
-
+	// 処理済みメッセージIDを保存するマップ
+	processedIDs := make(map[string]bool)
 	// 10秒ごとに実行するティッカー（タイマー）を作成
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	// 無限ループで定期実行
 	for range ticker.C {
-		checkAuthCode(srv, re)
+		checkAuthCode(srv, re, processedIDs)
 	}
 }
 
 // checkAuthCode はメールの検索とクリップボードへのコピーを行います
-func checkAuthCode(srv *gmail.Service, re *regexp.Regexp) {
+func checkAuthCode(srv *gmail.Service, re *regexp.Regexp, processedIDs map[string]bool) {
 	user := "me"
 
 	// 未読で、件名に「認証コードは」を含むメールを検索
@@ -126,6 +127,11 @@ func checkAuthCode(srv *gmail.Service, re *regexp.Regexp) {
 	}
 
 	for _, msg := range r.Messages {
+		if processedIDs[msg.Id] {
+			// 既に処理済みのmsgはスキップ
+			continue
+		}
+
 		// ヘッダー情報（件名）のみを軽量に取得
 		m, err := srv.Users.Messages.Get(user, msg.Id).Format("metadata").MetadataHeaders("Subject").Do()
 		if err != nil {
@@ -151,6 +157,10 @@ func checkAuthCode(srv *gmail.Service, re *regexp.Regexp) {
 				log.Printf("コピー失敗: %v", err)
 			} else {
 				fmt.Printf("★ コピー成功: %s (件名: %s)\n", authCode, subject)
+
+				// 処理済みとして記憶
+				processedIDs[msg.Id] = true
+
 				// ==========================================
 				// ★追加: トースト通知を送信
 				// ==========================================
