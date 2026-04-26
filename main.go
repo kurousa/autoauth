@@ -23,14 +23,47 @@ import (
 // ==========================================
 
 // getClient は設定情報を元にHTTPクライアントを生成します（初回はWeb認証）
-func getClient(config *oauth2.Config) *http.Client {
+// トークンがリフレッシュされた場合に自動的に保存するためのラップを行います。
+func getClient(ctx context.Context, config *oauth2.Config) *http.Client {
 	tokFile := "token.json"
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
 		tok = getTokenFromWeb(config)
 		saveToken(tokFile, tok)
 	}
-	return config.Client(context.Background(), tok)
+
+	// トークンソースを作成。有効期限が切れている場合はリフレッシュされます。
+	ts := config.TokenSource(ctx, tok)
+
+	// トークンがリフレッシュされたら自動でファイルに保存するようにラップする。
+	saveTs := &sourceWithPersistence{
+		source: ts,
+		path:   tokFile,
+		token:  tok,
+	}
+
+	return oauth2.NewClient(ctx, saveTs)
+}
+
+// sourceWithPersistence は oauth2.TokenSource をラップし、トークンの更新を検知して保存します。
+type sourceWithPersistence struct {
+	source oauth2.TokenSource
+	path   string
+	token  *oauth2.Token
+}
+
+func (s *sourceWithPersistence) Token() (*oauth2.Token, error) {
+	tok, err := s.source.Token()
+	if err != nil {
+		return nil, err
+	}
+	// アクセストークンが変わっていれば、更新されたとみなして保存。
+	if s.token == nil || tok.AccessToken != s.token.AccessToken {
+		fmt.Printf("トークンが更新されました。保存を試みます: %s\n", s.path)
+		saveToken(s.path, tok)
+		s.token = tok
+	}
+	return tok, nil
 }
 
 // getTokenFromWeb はブラウザでの認証を促し、トークンを取得します
@@ -63,15 +96,17 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 	return tok, err
 }
 
-// saveToken は取得したトークンを token.json に保存します
+// saveToken は更新されたトークンをファイルに保存します
 func saveToken(path string, token *oauth2.Token) {
-	fmt.Printf("トークンを保存しています: %s\n", path)
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
-		log.Fatalf("トークンの保存に失敗しました: %v", err)
+		log.Printf("トークンの保存に失敗しました: %v", err)
+		return
 	}
 	defer f.Close()
-	json.NewEncoder(f).Encode(token)
+	if err := json.NewEncoder(f).Encode(token); err != nil {
+		log.Printf("トークンのエンコードに失敗しました: %v", err)
+	}
 }
 
 // ==========================================
@@ -91,7 +126,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("設定の解析エラー: %v", err)
 	}
-	client := getClient(config)
+	client := getClient(ctx, config)
 
 	// Gmailサービスをビルド
 	srv, err := gmail.NewService(ctx, option.WithHTTPClient(client))
